@@ -11,23 +11,27 @@ from struct import pack,unpack
 
 class ClientRAFT(object):
     fernetKey = base64.urlsafe_b64decode('3he7wwxKPSMIRZ25xlpBOapqOYpHqW9qL2y1FCFH9ec=')
+    life_time = 10
     def __init__(self, fernet_token=None, backend=None):
         if backend is None:
             backend = default_backend()
         self._backend = backend
+        self._life_time = self.life_time
 
         if fernet_token is not None:
             self.SetSourceToken(fernet_token)
 
-    def SetSourceToken(self,fernet_token):
+    def SetSourceToken(self,fernet_token,LifeTime = self.life_time):
         self._OriginalToken = base64.urlsafe_b64decode(fernet_token)
         self._sign_key = self._OriginalToken[-32:-16]
         self._encryption_key = self._OriginalToken[-16:]
         self._id = self._OriginalToken[:-32]
+        self._life_time = LifeTime
 
     def SetCommand(self, command):
         self._command = command
 
+ 
     def Finalize(self):
 
         self._NewToken = pack(">BH" + 
@@ -35,7 +39,7 @@ class ClientRAFT(object):
                               0x91,
                               len(self._id),
                               self._id)
-        self._command=pack(">HQ8s"+str(len(self._command))+"s",len(self._command), int(time.time()),os.urandom(8),bytearray(self._command,"utf8"))
+        self._command=pack(">Q8s"+str(len(self._command))+"s", int(time.time())+self._life_time,os.urandom(8),bytearray(self._command,"utf8"))
         self._NewToken+=self._command
         self.h = HMAC(self._sign_key, hashes.SHA256(), self._backend)
         self.h.update(self._NewToken)
@@ -78,24 +82,6 @@ class ClientRAFT(object):
         else:
             raise Exception("Error: Not a RAFT token (Format)")
         return ""
-
-
-    def ValidateTokenTest(self):
-        if self._id[0]==0x91 :
-            print("RAFT")
-            self._lenId, = unpack(">H",self._id[1:3])
-            print(self._id)
-            self._OriginalId =  self._id[3:3+self._lenId]
-            self._sign_key = base64.urlsafe_b64decode(SourceKey)[-32:-16]
-            self.h2 = HMAC(self._sign_key, hashes.SHA256(), self._backend)
-            self.h2.update(self._OriginalId)
-            self._OriginalToken= base64.urlsafe_b64encode(self._OriginalId + self.h2.finalize())
-            return self._OriginalToken
-
-        else:
-            print("error")
-
-        return 1
 
 SourceKey = '3he7wwxKPSMIRZ25xlpBOapqOYpHqW9qL2y1FCFH9ec='
 SourceTokenGenerator = fernet.Fernet(SourceKey)
